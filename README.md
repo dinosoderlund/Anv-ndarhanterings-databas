@@ -29,3 +29,7 @@ login_attempts_by_IP: Rapporterar inloggningsförsök per IP.
 ⚡ Prestandaoptimering
 Indexering av UserID, email, attemptedAt, reset_token och RoleID för snabbare sökningar.
 
+
+Python implementering
+Jag har nu implementerat python till min databas med första filen database_connect.py som sätter upp en anslutning så att python kan kommunicera med sql databasen,
+sedan har jag även skapat login_attempts.py som lägger till 800 login attempts med random ip adresser med olika funktioner anpassat till det såsom office hours etc. 
