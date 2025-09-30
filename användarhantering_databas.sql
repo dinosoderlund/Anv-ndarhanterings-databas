@@ -1,3 +1,4 @@
+--Creating the database 
 IF DB_ID('Hederlige_Harrys_Bilar') IS NULL
     CREATE DATABASE Hederlige_Harrys_Bilar;
 GO
@@ -5,7 +6,7 @@ USE Hederlige_Harrys_Bilar;
 GO
 
 
--- Skapar table för användare
+--table for users 
 IF OBJECT_ID('dbo.USERS', 'U') IS NULL
 BEGIN
 CREATE TABLE USERS(
@@ -29,7 +30,7 @@ CREATE TABLE USERS(
 	
 );
 END
- 
+ --table for verification token 
  IF OBJECT_ID('dbo.USERS', 'U') IS NULL
 BEGIN
 CREATE TABLE EmailVerificationToken(
@@ -41,7 +42,7 @@ CREATE TABLE EmailVerificationToken(
 );
 END
 
--- Skapar table för olika roller
+-- Creating table for the different roles 
 IF OBJECT_ID('dbo.USERS', 'U') IS NULL
 BEGIN
 CREATE TABLE Roles(
@@ -50,7 +51,7 @@ CREATE TABLE Roles(
     CreatedAt DATETIME NOT NULL DEFAULT GETDATE()
 );
 END
--- Skapar table för olika roller användare kan ha
+-- table for user role 
 IF OBJECT_ID('dbo.USERS', 'U') IS NULL
 BEGIN
 CREATE TABLE UserRoles(
@@ -63,7 +64,7 @@ CREATE TABLE UserRoles(
 );
 END
 
--- Skapar table som håller koll på hur många gånger en användare har försökt logga in
+-- table for keeping track of login attempts 
 IF OBJECT_ID('dbo.USERS', 'U') IS NULL
 BEGIN
 CREATE TABLE LoginAttempts(
@@ -77,7 +78,7 @@ CREATE TABLE LoginAttempts(
 );
 END
 
--- Skapar table för att återställa password
+--table for resetting password 
 IF OBJECT_ID('dbo.USERS', 'U') IS NULL
 BEGIN
 CREATE TABLE PasswordResetTokens(
@@ -90,9 +91,7 @@ CREATE TABLE PasswordResetTokens(
 );
 END
 
--- Skapar index
--- USERS.Email already has a UNIQUE constraint which creates a unique index automatically,
--- so IX_USERS is redundant. You can skip it. If you still want a non-unique index, keep this:
+--creating index for better performance 
 IF NOT EXISTS (
     SELECT 1 FROM sys.indexes 
     WHERE name = 'IX_USERS' AND object_id = OBJECT_ID('dbo.USERS')
@@ -150,7 +149,7 @@ IF NOT EXISTS (
 GO
 
 
--- Lägger till roller
+-- inserting roles 
 IF NOT EXISTS (SELECT 1 FROM dbo.Roles WHERE RoleName = 'Customer')
     INSERT INTO dbo.Roles(RoleName) VALUES ('Customer');
 
@@ -160,7 +159,7 @@ GO
 
 
 
--- Registrera användare
+-- procedure for registering user 
 CREATE OR ALTER PROCEDURE dbo.RegistreraAnvändare
     @Email NVARCHAR(255),
     @Password NVARCHAR(255),
@@ -184,7 +183,7 @@ BEGIN
         PRINT N'Epost Adressen är redan registerad i databasen';
         RETURN;
     END;
-
+	--password hashing sha 256
     DECLARE @SaltedPassword NVARCHAR(255) = @Password + @Salt;
     DECLARE @PasswordHash VARBINARY(64)   = HASHBYTES('SHA2_256', @SaltedPassword);
 
@@ -205,7 +204,7 @@ END;
 GO
 
 
--- Bekräfta e-post
+-- confirming email verification
 CREATE OR ALTER PROCEDURE dbo.ConfirmEmailVerification
     @Token NVARCHAR(255)
 AS 
@@ -236,7 +235,7 @@ END;
 GO
 
 
--- Hantera inloggning
+-- manage login 
 CREATE OR ALTER PROCEDURE dbo.LoginManagement
     @Email NVARCHAR(255),
     @Password NVARCHAR(255),
@@ -245,7 +244,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Temp-tabell för meddelanden (endast för test/visning)
+    -- Temp-table for messages
     CREATE TABLE #templogs(
         LogID INT IDENTITY(1,1) PRIMARY KEY,
         Message NVARCHAR(255),
@@ -257,8 +256,8 @@ BEGIN
             @Salt NVARCHAR(60),
             @IsLockedOut BIT,
             @FailedAttempts INT;
-
-    DECLARE @ResultCode  INT = 0;        -- 0 = lyckad inloggning
+	-- 0 = succeded login, -1 = user does not exist, -2 = locked account
+    DECLARE @ResultCode  INT = 0;        
     DECLARE @ErrorMessage NVARCHAR(255) = N'';
 
     SELECT @UserID = UserID,
@@ -270,7 +269,7 @@ BEGIN
 
     IF @UserID IS NULL
     BEGIN
-        SET @ResultCode  = -1; -- Ogiltig användare
+        SET @ResultCode  = -1; 
         SET @ErrorMessage = N'Användaren finns inte';
         INSERT INTO #templogs (Message) VALUES(@ErrorMessage);
         PRINT @ErrorMessage;
@@ -280,14 +279,14 @@ BEGIN
 
     IF @IsLockedOut = 1
     BEGIN
-        SET @ResultCode  = -2; -- Låst konto
+        SET @ResultCode  = -2;
         SET @ErrorMessage = N'Kontot är låst';
         INSERT INTO #templogs (Message) VALUES(@ErrorMessage);
         PRINT @ErrorMessage;
         SELECT @ResultCode AS ResultCode, @ErrorMessage AS ErrorMessage;
         RETURN;
     END;
-
+	--hashing
     DECLARE @SaltedPassword NVARCHAR(255) = @Password + @Salt;
     DECLARE @HashedPassword VARBINARY(64) = HASHBYTES('SHA2_256', @SaltedPassword);
 
@@ -309,7 +308,7 @@ BEGIN
         INSERT INTO #templogs (Message) VALUES(@ErrorMessage);
         PRINT @ErrorMessage;
 
-        -- Lås om >= 3 misslyckade försök senaste 15 min
+        -- locked if tries >= 3 for 15 min 
         SELECT @FailedAttempts = COUNT(*)
         FROM dbo.LoginAttempts
         WHERE UserID = @UserID
@@ -337,12 +336,12 @@ BEGIN
     END;
 
     SELECT @ResultCode AS ResultCode, @ErrorMessage AS ErrorMessage;
-    SELECT * FROM #templogs; -- Visar temp-loggar för testning
+    SELECT * FROM #templogs; -- shows temp logs for testing 
 END;
 GO
 
 
--- Skapa återställnings-token
+-- creating token for resetting password 
 CREATE OR ALTER PROCEDURE dbo.ForgotPassword
     @Email NVARCHAR(255)
 AS 
@@ -371,7 +370,7 @@ END;
 GO
 
 
--- Återställ lösenord med token
+-- reset password with token 
 CREATE OR ALTER PROCEDURE dbo.FixForgottenPassword
     @Email NVARCHAR(255),
     @NewPassword NVARCHAR(255),
@@ -391,7 +390,7 @@ BEGIN
         PRINT N'Ogiltigt eller expired token';
         RETURN;
     END;
-
+	--hashing
     SET @Salt = CONVERT(NVARCHAR(60), CRYPT_GEN_RANDOM(32), 2);
     DECLARE @SaltedPassword NVARCHAR(255) = @NewPassword + @Salt;
     DECLARE @PasswordHash VARBINARY(64)   = HASHBYTES('SHA2_256', @SaltedPassword);
@@ -408,7 +407,7 @@ BEGIN
 END;
 GO
 
-
+--inserting some fake users 
 EXEC RegistreraAnvändare
     @Email = 'test@exempel.com',
     @Password = '123',
@@ -448,47 +447,46 @@ EXEC RegistreraAnvändare
 
 EXEC ConfirmEmailVerification @Token = 'Genereradtoken3';
 
--- Simulera inloggningsförsök
+-- simulating login attempts
 EXEC LoginManagement
     @Email = 'test@exempel.com',
     @Password = '123',
-    @IPAddress = '192.158.1.38'; -- Lyckat försök
+    @IPAddress = '192.158.1.38'; -- success
 
 EXEC LoginManagement
     @Email = 'test@exempel.com',
     @Password = '123',
-    @IPAddress = '192.158.1.38'; -- Misslyckat försök
+    @IPAddress = '192.158.1.38'; -- failed
 
 EXEC LoginManagement
     @Email = 'test@exempel.com',
     @Password = '123',
-    @IPAddress = '192.158.1.38'; -- Misslyckat försök
+    @IPAddress = '192.158.1.38'; -- failed
 
 EXEC LoginManagement
     @Email = 'test@exempel2.com',
     @Password = '321@E¤%',
-    @IPAddress = '192.168.1.2'; -- Lyckat försök
+    @IPAddress = '192.168.1.2'; -- success
 
 
-	--La bara till användare3 snabbt för att visa att konto låser sig
-	--Använder inte den i resten av testningen för den anledningen 
+	--inserting another user to show how locked account works
 	EXEC LoginManagement
     @Email = 'test@exempel3.com',
     @Password = '123',
-    @IPAddress = '192.158.2.38'; -- Misslyckat försök
-
-	EXEC LoginManagement
-    @Email = 'test@exempel3.com',
-    @Password = '123',
-    @IPAddress = '192.158.2.38'; -- Misslyckat försök
-
+    @IPAddress = '192.158.2.38'; -- failed
 
 	EXEC LoginManagement
     @Email = 'test@exempel3.com',
     @Password = '123',
-    @IPAddress = '192.158.2.38'; -- Misslyckat försök
+    @IPAddress = '192.158.2.38'; -- failed
 
--- Tilldela roller till användare
+
+	EXEC LoginManagement
+    @Email = 'test@exempel3.com',
+    @Password = '123',
+    @IPAddress = '192.158.2.38'; -- failed
+
+-- giving roles to users 
 DECLARE @CustomerRoleID INT, @AdminRoleID INT, @User1ID INT, @User2ID INT;
 
 SELECT @CustomerRoleID = RoleID FROM Roles WHERE RoleName = 'Customer';
@@ -501,7 +499,7 @@ INSERT INTO UserRoles(UserID, RoleID)
 VALUES(@User1ID, @CustomerRoleID),
       (@User2ID, @AdminRoleID);
 
--- Testa återställning av lösenord
+-- testing to reset password 
 EXEC ForgotPassword @Email = 'test@exempel.com';
 
 DECLARE @ResetToken NVARCHAR(255);
@@ -514,8 +512,8 @@ EXEC FixForgottenPassword
 
 
 
--- Skapa vyer
---Succes är 1 för lyckad inloggning, succes = 0 är misslyckad inloggning
+-- views
+--success: success = 1, failed: success = 0 
 GO
 CREATE OR ALTER VIEW dbo.UserLoginSummary
 AS
@@ -538,7 +536,8 @@ LEFT JOIN LatestLogins AS l
     ON u.UserID = l.UserID;
 GO
 
--- Aggregering per IP-adress: antal, lyckade/misslyckade och andel lyckade
+
+--showing login attempts by ip 
 GO
 CREATE OR ALTER VIEW dbo.LoginAttemptsByIP
 AS
@@ -552,8 +551,9 @@ FROM dbo.LoginAttempts AS la
 GROUP BY la.IPAddress;
 GO
 
--- Testa vyer
+-- demo 
 SELECT * FROM UserLoginSummary;
 SELECT * FROM LoginAttemptsByIP;
 SELECT COUNT(*) AS total FROM dbo.LoginAttempts;
 SELECT TOP 30 * FROM dbo.LoginAttempts ORDER BY LoginAttemptID DESC;
+
